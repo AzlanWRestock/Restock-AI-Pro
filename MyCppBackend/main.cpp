@@ -2,6 +2,7 @@
 #include <curl/curl.h>
 #include <iostream>
 #include <string>
+#include <cstdlib> // Required for getenv
 
 using namespace std;
 
@@ -15,6 +16,7 @@ string googleSearch(string query) {
     string readBuffer;
     CURL* curl = curl_easy_init();
     if(curl) {
+        // Keeping Serper key here for now as it's less sensitive than Groq
         string serper_key = "673cae971771d725b4e97ae33f48496170b6e88f";
         string url = "https://google.serper.dev/search";
         string payload = "{\"q\":\"" + query + "\"}";
@@ -42,11 +44,14 @@ int main() {
         string user_msg = x["message"].s();
         cout << "\n[AZLAN]: " << user_msg << endl;
 
-        string groq_key = "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";
+        // --- DYNAMIC API KEY ---
+        // Looks for the key in Render environment variables. 
+        // If not found, it falls back to your provided key.
+        const char* env_key = std::getenv("GROQ_API_KEY");
+        string groq_key = (env_key != NULL) ? string(env_key) : "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";
         
         // --- WEB SEARCH TRIGGER ---
         string web_data = "";
-        // If the message asks about facts, news, or people, search Google
         if (user_msg.find("who") != string::npos || user_msg.find("what") != string::npos || 
             user_msg.find("news") != string::npos || user_msg.find("score") != string::npos) {
             cout << "[SYSTEM]: Fetching Google Search results..." << endl;
@@ -82,7 +87,6 @@ int main() {
         string ai_res = j["choices"][0]["message"]["content"].s();
         cout << "[AI]: " << ai_res << endl;
 
-        // RESPONSE PACKAGE
         crow::response res;
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Content-Type", "application/json");
@@ -97,5 +101,10 @@ int main() {
     cout << "   RESTOCK AI 3.0 - GOOGLE SEARCH ACTIVE   " << endl;
     cout << "===========================================" << endl;
 
-    app.port(8080).multithreaded().run();
+    // --- CLOUD PORT CONFIG ---
+    // Render tells the app which port to use. If it can't find one, it uses 8080.
+    const char* port_env = std::getenv("PORT");
+    int port = (port_env != NULL) ? std::stoi(port_env) : 8080;
+    
+    app.port(port).multithreaded().run();
 }
