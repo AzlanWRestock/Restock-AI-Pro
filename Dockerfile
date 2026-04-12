@@ -1,20 +1,19 @@
-# Use a Linux image with GCC installed
 FROM gcc:latest
 
-# Install libcurl (required for your Google/Groq searches)
+# Install libraries
 RUN apt-get update && apt-get install -y libcurl4-openssl-dev
 
-# Set the working directory
 WORKDIR /app
 
-# Copy your C++ code into the cloud server
-COPY . .
+# 1. Copy the contents of the MyCppBackend folder INTO the app folder
+COPY MyCppBackend/ .
 
-# Compile the code (Using Linux flags)
+# 2. List the files (so we can see it worked in the logs)
+RUN ls -la
+
+# 3. Now g++ will see main.cpp right there in front of it
 RUN g++ main.cpp -o server -lcurl -lpthread
 
-# Tell the server to listen on port 8080
 EXPOSE 8080
 
-# Run the server
 CMD ["./server"]
