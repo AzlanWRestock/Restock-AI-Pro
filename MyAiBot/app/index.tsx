@@ -21,7 +21,6 @@ interface Message {
   sender: 'user' | 'bot';
 }
 
-// Sub-component for the Fade-In effect
 const FadeInMessage = ({ children }: { children: React.ReactNode }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(10)).current;
@@ -44,7 +43,7 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [chatHistory, setChatHistory] = useState<Message[]>([
-    { id: '1', text: 'Salam Azlan! Restock AI Pro is online.', sender: 'bot' }
+    { id: '1', text: 'Salam Azlan! Restock AI Pro is online and connected to the cloud.', sender: 'bot' }
   ]);
   
   const flatListRef = useRef<FlatList>(null);
@@ -53,7 +52,6 @@ export default function ChatScreen() {
   const sendMessage = async () => {
     if (isInputEmpty) return;
 
-    // 5. Haptic Feedback (Vibrate on send)
     Vibration.vibrate(10); 
 
     const userMsg: Message = { id: Date.now().toString(), text: inputText, sender: 'user' };
@@ -63,44 +61,50 @@ export default function ChatScreen() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://192.168.1.105:8080/chat', {
+      // --- UPDATED TO RENDER URL ---
+      const response = await fetch('https://restock-ai-backend.onrender.com/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg.text }),
       });
+
+      if (!response.ok) throw new Error('Server issues');
+
       const data = await response.json();
       
-      // 5. Haptic Feedback (Vibrate on receive)
       Vibration.vibrate(20); 
 
       setChatHistory([...updatedHistory, { id: (Date.now() + 1).toString(), text: data.reply, sender: 'bot' }]);
     } catch (error) {
-      setChatHistory([...updatedHistory, { id: 'err', text: 'Connection lost.', sender: 'bot' }]);
+      // Friendly error message for "cold starts" on Render
+      setChatHistory([...updatedHistory, { 
+        id: 'err', 
+        text: 'The engine is warming up (Render free tier). Please try sending that again in 30 seconds!', 
+        sender: 'bot' 
+      }]);
     } finally {
       setLoading(false);
     }
-  };return (
+  };
+
+  return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
-      {/* 4. Glassmorphism Header (Semi-transparent) */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Restock AI</Text>
       </View>
 
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : -30}
       >
         <FlatList
           ref={flatListRef}
           data={chatHistory}
           keyExtractor={(item) => item.id}
-          // 6. Smooth Auto-Scroll
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           renderItem={({ item }) => (
-            // 1. Fade-In Animation wrapper
             <FadeInMessage>
               <View style={styles.messageRow}>
                 <Text style={styles.label}>{item.sender === 'user' ? 'Azlan' : 'Restock AI'}</Text>
@@ -111,7 +115,6 @@ export default function ChatScreen() {
           contentContainerStyle={styles.listContent}
         />
 
-        {/* 3. Typing Indicator */}
         {loading && (
           <View style={styles.typingContainer}>
             <Text style={styles.typingText}>Engine is thinking...</Text>
@@ -124,7 +127,7 @@ export default function ChatScreen() {
               style={styles.input}
               value={inputText}
               onChangeText={setInputText}
-              placeholder="e.g. Whats the weather today?"
+              placeholder="Ask anything..."
               placeholderTextColor="#A1A1A1"
             />
             <TouchableOpacity 
@@ -144,21 +147,21 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: { 
-    paddingTop: 50, 
+    paddingTop: 20, 
     paddingBottom: 15, 
     alignItems: 'center', 
-    backgroundColor: 'rgba(255, 255, 255, 0.9)', // 4. Semi-transparent
+    backgroundColor: '#FFF',
     borderBottomWidth: 0.5,
     borderBottomColor: '#EEE'
   },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: '#000', letterSpacing: -1 },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#000', letterSpacing: -1 },
   listContent: { paddingHorizontal: 25, paddingTop: 10, paddingBottom: 20 },
   messageRow: { marginBottom: 28 },
-  label: { fontSize: 12, fontWeight: '700', color: '#888', marginBottom: 4, textTransform: 'uppercase' },
-  messageText: { fontSize: 18, color: '#1A1A1A', lineHeight: 26 },
+  label: { fontSize: 10, fontWeight: '700', color: '#888', marginBottom: 4, textTransform: 'uppercase' },
+  messageText: { fontSize: 17, color: '#1A1A1A', lineHeight: 24 },
   typingContainer: { paddingHorizontal: 25, paddingBottom: 10 },
   typingText: { fontSize: 12, color: '#AAA', fontStyle: 'italic' },
-  footer: { paddingHorizontal: 20, paddingBottom: 20, paddingTop: 10, backgroundColor: '#FFF' },
+  footer: { paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 20 : 30, paddingTop: 10, backgroundColor: '#FFF' },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -169,5 +172,5 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, fontSize: 16, color: '#000' },
   sendBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
-  whiteCircle: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#FFF' }
+  whiteCircle: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFF' }
 });
