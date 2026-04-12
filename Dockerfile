@@ -1,17 +1,20 @@
 FROM gcc:latest
 
-# Install libraries
-RUN apt-get update && apt-get install -y libcurl4-openssl-dev
+# 1. Install curl AND the asio development library
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    libasio-dev
 
 WORKDIR /app
 
-# 1. Copy the contents of the MyCppBackend folder INTO the app folder
+# 2. Copy your backend files
 COPY MyCppBackend/ .
 
-# 2. List the files (so we can see it worked in the logs)
+# 3. List files to verify
 RUN ls -la
 
-# 3. Now g++ will see main.cpp right there in front of it
+# 4. Compile with the correct flags
+# We added -I/usr/include/asio to make sure it finds the headers
 RUN g++ main.cpp -o server -lcurl -lpthread
 
 EXPOSE 8080
