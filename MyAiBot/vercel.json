@@ -1,5 +1,7 @@
 {
+  "version": 2,
   "public": true,
+  "name": "MyAiBot",
   "rewrites": [
     {
       "source": "/(.*)",
