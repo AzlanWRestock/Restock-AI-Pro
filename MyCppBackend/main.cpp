@@ -7,16 +7,18 @@
 
 using namespace std;
 
-// CLEANUP: Prevents broken JSON from Wikipedia/Google snippets
+// IMPROVED CLEANUP: Escapes quotes and backslashes to prevent JSON crashes
 string cleanJson(string str) {
-    size_t start = 0;
-    while ((start = str.find("\"", start)) != string::npos) {
-        str.replace(start, 1, "\\\"");
-        start += 2;
+    string output;
+    for (char c : str) {
+        if (c == '"') output += "\\\"";
+        else if (c == '\\') output += "\\\\";
+        else if (c == '\n') output += " ";
+        else if (c == '\r') output += " ";
+        else if (c == '\t') output += " ";
+        else output += c;
     }
-    str.erase(remove(str.begin(), str.end(), '\n'), str.end());
-    str.erase(remove(str.begin(), str.end(), '\r'), str.end());
-    return str;
+    return output;
 }
 
 size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
@@ -24,17 +26,18 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     return size * nmemb;
 }
 
-// --- GOOGLE SEARCH ENGINE ---
+// --- GOOGLE SEARCH ENGINE (SERPER.DEV) ---
 string googleSearch(string query) {
     string readBuffer;
     CURL* curl = curl_easy_init();
     if(curl) {
         const char* s_env = std::getenv("SERPER_API_KEY");
-        // Fallback to your key if env is missing
+        // Your current key as fallback
         string serper_key = (s_env != NULL) ? string(s_env) : "673cae971771d725b4e97ae33f48496170b6e88f";
         
         string url = "https://google.serper.dev/search";
-        string payload = "{\"q\":\"" + query + "\"}";
+        // Create a safe payload for the search request
+        string payload = "{\"q\":\"" + cleanJson(query) + "\"}";
 
         struct curl_slist* headers = NULL;
         headers = curl_slist_append(headers, ("X-API-KEY: " + serper_key).c_str());
@@ -46,12 +49,10 @@ string googleSearch(string query) {
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         
-        CURLcode res = curl_easy_perform(curl);
-        if(res != CURLE_OK) cout << "[ERROR] Google Search failed: " << curl_easy_strerror(res) << endl;
-        
+        curl_easy_perform(curl);
         curl_easy_cleanup(curl);
     }
-    return cleanJson(readBuffer);
+    return readBuffer; // Return raw; we clean it before sending to AI
 }
 
 int main() {
@@ -67,21 +68,25 @@ int main() {
         cout << "\n[USER]: " << user_msg << endl;
 
         const char* g_env = std::getenv("GROQ_API_KEY");
+        // Your current key as fallback
         string groq_key = (g_env != NULL) ? string(g_env) : "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";
         
-        // SEARCH LOGIC: If it's not a tiny message, search Google
         string web_data = "";
+        // Only search if the message is substantial
         if (user_msg.length() > 3) { 
             cout << "[SYSTEM]: Searching the web for: " << user_msg << endl;
             web_data = googleSearch(user_msg);
         }
 
-        string system_context = "You are Restock AI. Use this LIVE info to answer: ";
-        string full_context = system_context + (web_data.empty() ? "No live data found." : web_data);
+        // Clean the search data BEFORE adding it to the context
+        string safe_web_data = cleanJson(web_data);
+        string system_context = "You are Restock AI. Answer using this LIVE data: " + (safe_web_data.empty() ? "No live data found." : safe_web_data);
+        
         string safe_user_msg = cleanJson(user_msg);
 
+        // Build the Final JSON Payload
         string payload = "{\"model\": \"llama-3.1-8b-instant\", \"messages\": ["
-                         "{\"role\": \"system\", \"content\": \"" + cleanJson(full_context) + "\"},"
+                         "{\"role\": \"system\", \"content\": \"" + system_context + "\"},"
                          "{\"role\": \"user\", \"content\": \"" + safe_user_msg + "\"}]}";
 
         string aiBuffer;
@@ -105,7 +110,8 @@ int main() {
         if (j && j.count("choices") && j["choices"].size() > 0) {
             ai_res = j["choices"][0]["message"]["content"].s();
         } else {
-            cout << "[DEBUG] Raw AI Buffer: " << aiBuffer << endl;
+            // This is vital for debugging in Render logs
+            cout << "[DEBUG] Raw AI Buffer Response: " << aiBuffer << endl;
         }
         
         cout << "[AI]: " << ai_res << endl;
