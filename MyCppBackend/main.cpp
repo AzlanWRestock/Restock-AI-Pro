@@ -7,7 +7,7 @@
 
 using namespace std;
 
-// Helper to clean up search data so it doesn't break JSON
+// CLEANUP: Prevents broken JSON from Wikipedia/Google snippets
 string cleanJson(string str) {
     size_t start = 0;
     while ((start = str.find("\"", start)) != string::npos) {
@@ -24,13 +24,13 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     return size * nmemb;
 }
 
-// --- GOOGLE SEARCH (SERPER.DEV) ---
+// --- GOOGLE SEARCH ENGINE ---
 string googleSearch(string query) {
     string readBuffer;
     CURL* curl = curl_easy_init();
     if(curl) {
-        // Use environment variable for Serper Key too!
         const char* s_env = std::getenv("SERPER_API_KEY");
+        // Fallback to your key if env is missing
         string serper_key = (s_env != NULL) ? string(s_env) : "673cae971771d725b4e97ae33f48496170b6e88f";
         
         string url = "https://google.serper.dev/search";
@@ -45,10 +45,13 @@ string googleSearch(string query) {
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-        curl_easy_perform(curl);
+        
+        CURLcode res = curl_easy_perform(curl);
+        if(res != CURLE_OK) cout << "[ERROR] Google Search failed: " << curl_easy_strerror(res) << endl;
+        
         curl_easy_cleanup(curl);
     }
-    return cleanJson(readBuffer); // Clean the search results
+    return cleanJson(readBuffer);
 }
 
 int main() {
@@ -63,26 +66,22 @@ int main() {
         string user_msg = x["message"].s();
         cout << "\n[USER]: " << user_msg << endl;
 
-        const char* env_key = std::getenv("GROQ_API_KEY");
-        string groq_key = (env_key != NULL) ? string(env_key) : "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";
+        const char* g_env = std::getenv("GROQ_API_KEY");
+        string groq_key = (g_env != NULL) ? string(g_env) : "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";
         
-        // --- IMPROVED LOGIC: Search for everything unless it's a simple greeting ---
+        // SEARCH LOGIC: If it's not a tiny message, search Google
         string web_data = "";
-        if (user_msg.length() > 5) { 
-            cout << "[SYSTEM]: Fetching Google Search results for: " << user_msg << endl;
+        if (user_msg.length() > 3) { 
+            cout << "[SYSTEM]: Searching the web for: " << user_msg << endl;
             web_data = googleSearch(user_msg);
         }
 
-        string system_context = "You are Restock AI, a helpful assistant. ";
-        if (!web_data.empty()) {
-            system_context += "IMPORTANT: Use these LIVE Google search results to answer the user: " + web_data;
-        }
-
-        // Properly escape user message for JSON
+        string system_context = "You are Restock AI. Use this LIVE info to answer: ";
+        string full_context = system_context + (web_data.empty() ? "No live data found." : web_data);
         string safe_user_msg = cleanJson(user_msg);
 
         string payload = "{\"model\": \"llama-3.1-8b-instant\", \"messages\": ["
-                         "{\"role\": \"system\", \"content\": \"" + system_context + "\"},"
+                         "{\"role\": \"system\", \"content\": \"" + cleanJson(full_context) + "\"},"
                          "{\"role\": \"user\", \"content\": \"" + safe_user_msg + "\"}]}";
 
         string aiBuffer;
@@ -100,20 +99,20 @@ int main() {
             curl_easy_cleanup(curl);
         }
 
-        string ai_res = "I encountered an error processing that.";
         auto j = crow::json::load(aiBuffer);
-        if (j && j["choices"] && j["choices"][0]["message"]["content"]) {
+        string ai_res = "Engine is still warming up! Give me 10 more seconds and ask again.";
+
+        if (j && j.count("choices") && j["choices"].size() > 0) {
             ai_res = j["choices"][0]["message"]["content"].s();
+        } else {
+            cout << "[DEBUG] Raw AI Buffer: " << aiBuffer << endl;
         }
         
         cout << "[AI]: " << ai_res << endl;
 
         crow::response res;
         res.set_header("Access-Control-Allow-Origin", "*");
-        res.set_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-        res.set_header("Access-Control-Allow-Headers", "Content-Type");
         res.set_header("Content-Type", "application/json");
-        
         crow::json::wvalue output;
         output["reply"] = ai_res;
         res.body = output.dump();
@@ -122,6 +121,5 @@ int main() {
 
     const char* port_env = std::getenv("PORT");
     int port = (port_env != NULL) ? std::stoi(port_env) : 8080;
-    
     app.port(port).multithreaded().run();
 }
