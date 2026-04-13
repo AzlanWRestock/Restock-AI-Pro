@@ -2,9 +2,22 @@
 #include <curl/curl.h>
 #include <iostream>
 #include <string>
-#include <cstdlib> 
+#include <cstdlib>
+#include <algorithm>
 
 using namespace std;
+
+// Helper to clean up search data so it doesn't break JSON
+string cleanJson(string str) {
+    size_t start = 0;
+    while ((start = str.find("\"", start)) != string::npos) {
+        str.replace(start, 1, "\\\"");
+        start += 2;
+    }
+    str.erase(remove(str.begin(), str.end(), '\n'), str.end());
+    str.erase(remove(str.begin(), str.end(), '\r'), str.end());
+    return str;
+}
 
 size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     ((string*)userp)->append((char*)contents, size * nmemb);
@@ -16,7 +29,10 @@ string googleSearch(string query) {
     string readBuffer;
     CURL* curl = curl_easy_init();
     if(curl) {
-        string serper_key = "673cae971771d725b4e97ae33f48496170b6e88f";
+        // Use environment variable for Serper Key too!
+        const char* s_env = std::getenv("SERPER_API_KEY");
+        string serper_key = (s_env != NULL) ? string(s_env) : "673cae971771d725b4e97ae33f48496170b6e88f";
+        
         string url = "https://google.serper.dev/search";
         string payload = "{\"q\":\"" + query + "\"}";
 
@@ -32,41 +48,42 @@ string googleSearch(string query) {
         curl_easy_perform(curl);
         curl_easy_cleanup(curl);
     }
-    return readBuffer;
+    return cleanJson(readBuffer); // Clean the search results
 }
 
 int main() {
     crow::SimpleApp app;
 
-    // --- NEW: HOME ROUTE (To avoid 404 in browser) ---
     CROW_ROUTE(app, "/")([](){
         return "<h1>Restock AI Pro - Engine 1.0</h1><p>Status: ONLINE</p>";
     });
 
-    // --- CHAT ROUTE ---
     CROW_ROUTE(app, "/chat").methods("POST"_method)([](const crow::request& req) {
         auto x = crow::json::load(req.body);
         string user_msg = x["message"].s();
-        cout << "\n[AZLAN]: " << user_msg << endl;
+        cout << "\n[USER]: " << user_msg << endl;
 
         const char* env_key = std::getenv("GROQ_API_KEY");
         string groq_key = (env_key != NULL) ? string(env_key) : "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";
         
+        // --- IMPROVED LOGIC: Search for everything unless it's a simple greeting ---
         string web_data = "";
-        if (user_msg.find("who") != string::npos || user_msg.find("what") != string::npos || 
-            user_msg.find("news") != string::npos || user_msg.find("score") != string::npos) {
-            cout << "[SYSTEM]: Fetching Google Search results..." << endl;
+        if (user_msg.length() > 5) { 
+            cout << "[SYSTEM]: Fetching Google Search results for: " << user_msg << endl;
             web_data = googleSearch(user_msg);
         }
 
-        string system_context = "You are Restock AI, a helpful assistant for Azlan. ";
+        string system_context = "You are Restock AI, a helpful assistant. ";
         if (!web_data.empty()) {
-            system_context += "Use these Google search results to answer: " + web_data;
+            system_context += "IMPORTANT: Use these LIVE Google search results to answer the user: " + web_data;
         }
+
+        // Properly escape user message for JSON
+        string safe_user_msg = cleanJson(user_msg);
 
         string payload = "{\"model\": \"llama-3.1-8b-instant\", \"messages\": ["
                          "{\"role\": \"system\", \"content\": \"" + system_context + "\"},"
-                         "{\"role\": \"user\", \"content\": \"" + user_msg + "\"}]}";
+                         "{\"role\": \"user\", \"content\": \"" + safe_user_msg + "\"}]}";
 
         string aiBuffer;
         CURL* curl = curl_easy_init();
@@ -83,11 +100,14 @@ int main() {
             curl_easy_cleanup(curl);
         }
 
+        string ai_res = "I encountered an error processing that.";
         auto j = crow::json::load(aiBuffer);
-        string ai_res = j["choices"][0]["message"]["content"].s();
+        if (j && j["choices"] && j["choices"][0]["message"]["content"]) {
+            ai_res = j["choices"][0]["message"]["content"].s();
+        }
+        
         cout << "[AI]: " << ai_res << endl;
 
-        // --- UPDATED RESPONSE WITH CORS HEADERS ---
         crow::response res;
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
@@ -99,10 +119,6 @@ int main() {
         res.body = output.dump();
         return res;
     });
-
-    cout << "===========================================" << endl;
-    cout << "   RESTOCK AI 3.0 - GOOGLE SEARCH ACTIVE   " << endl;
-    cout << "===========================================" << endl;
 
     const char* port_env = std::getenv("PORT");
     int port = (port_env != NULL) ? std::stoi(port_env) : 8080;
