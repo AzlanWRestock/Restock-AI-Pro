@@ -7,7 +7,7 @@
 
 using namespace std;
 
-// Improved Cleanup to handle all JSON-breaking characters
+// The "Deep Clean" function to prevent JSON errors in browsers
 string cleanJson(string str) {
     string output;
     for (char c : str) {
@@ -20,7 +20,7 @@ string cleanJson(string str) {
             case '\r': output += " "; break;
             case '\t': output += " "; break;
             default:
-                if ('\x00' <= c && c <= '\x1f') continue; // Skip control characters
+                if ('\x00' <= c && c <= '\x1f') continue;
                 output += c;
                 break;
         }
@@ -58,15 +58,15 @@ string googleSearch(string query) {
 int main() {
     crow::SimpleApp app;
 
-    // Root route for Health Checks
+    // Health Check Route
     CROW_ROUTE(app, "/")([](){
-        return "<h1>Restock AI Pro - Engine 1.2</h1><p>Status: ONLINE</p>";
+        return "Restock AI Engine 1.3 - Status: Active";
     });
 
-    // Chat route with OPTIONS method added for Browser Compatibility (CORS)
+    // Main Chat Route with CORS support
     CROW_ROUTE(app, "/chat").methods("POST"_method, "OPTIONS"_method)([](const crow::request& req) {
         
-        // --- STEP 1: HANDLE CORS PREFLIGHT ---
+        // --- HANDLE BROWSER SECURITY (The '204' Fix) ---
         if (req.method == "OPTIONS"_method) {
             crow::response res;
             res.set_header("Access-Control-Allow-Origin", "*");
@@ -76,23 +76,17 @@ int main() {
             return res;
         }
 
-        // --- STEP 2: HANDLE ACTUAL CHAT REQUEST ---
+        // --- PROCESS AI REQUEST ---
         auto x = crow::json::load(req.body);
-        if (!x) return crow::response(400, "Invalid JSON");
+        if (!x) return crow::response(400, "Bad Request");
         
         string user_msg = x["message"].s();
-        cout << "\n[USER]: " << user_msg << endl;
-
         const char* g_env = std::getenv("GROQ_API_KEY");
         string groq_key = (g_env != NULL) ? string(g_env) : "IN_RENDER";
         
-        string web_data = "";
-        if (user_msg.length() > 3) { 
-            web_data = googleSearch(user_msg);
-        }
-
+        string web_data = googleSearch(user_msg);
         string safe_web_data = cleanJson(web_data);
-        string system_context = "You are Restock AI. Answer using this data: " + (safe_web_data.empty() ? "No live data." : safe_web_data);
+        string system_context = "You are Restock AI. User is Azlan. Context: " + safe_web_data;
         string safe_user_msg = cleanJson(user_msg);
 
         string payload = "{\"model\": \"llama-3.1-8b-instant\", \"messages\": ["
@@ -115,17 +109,13 @@ int main() {
         }
 
         auto j = crow::json::load(aiBuffer);
-        string ai_res;
+        string ai_res = "Engine is slightly delayed. Try again in 5 seconds.";
 
-        if (j && j.count("choices") && j["choices"].size() > 0) {
+        if (j && j.count("choices")) {
             ai_res = j["choices"][0]["message"]["content"].s();
-        } else {
-            cout << "[DEBUG] Raw Response: " << aiBuffer << endl;
-            if (aiBuffer.find("401") != string::npos) ai_res = "Error: Invalid API Key.";
-            else if (aiBuffer.find("429") != string::npos) ai_res = "Error: Too many requests. Wait 1 min.";
-            else ai_res = "Engine error. Check Render logs for DEBUG info.";
         }
-        
+
+        // Final Response with all necessary headers
         crow::response res;
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
