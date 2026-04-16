@@ -68,7 +68,7 @@ int main() {
         cout << "\n[USER]: " << user_msg << endl;
 
         const char* g_env = std::getenv("GROQ_API_KEY");
-        string groq_key = (g_env != NULL) ? string(g_env) : "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";
+        string groq_key = (g_env != NULL) ? string(g_env) : "IN_RENDER";
         
         string web_data = "";
         if (user_msg.length() > 3) { 
