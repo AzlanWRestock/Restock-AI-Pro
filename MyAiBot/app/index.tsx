@@ -62,7 +62,7 @@ export default function ChatScreen() {
 
     try {
       // --- UPDATED TO RENDER URL ---
-      const response = await fetch('https://restock-ai-backend.onrender.com/chat', {
+      const response = await fetch('https://restock-python-backend.onrender.com/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg.text }),
