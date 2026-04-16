@@ -58,12 +58,28 @@ string googleSearch(string query) {
 int main() {
     crow::SimpleApp app;
 
+    // Root route for Health Checks
     CROW_ROUTE(app, "/")([](){
-        return "<h1>Restock AI Pro - Engine 1.1</h1><p>Status: ONLINE</p>";
+        return "<h1>Restock AI Pro - Engine 1.2</h1><p>Status: ONLINE</p>";
     });
 
-    CROW_ROUTE(app, "/chat").methods("POST"_method)([](const crow::request& req) {
+    // Chat route with OPTIONS method added for Browser Compatibility (CORS)
+    CROW_ROUTE(app, "/chat").methods("POST"_method, "OPTIONS"_method)([](const crow::request& req) {
+        
+        // --- STEP 1: HANDLE CORS PREFLIGHT ---
+        if (req.method == "OPTIONS"_method) {
+            crow::response res;
+            res.set_header("Access-Control-Allow-Origin", "*");
+            res.set_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+            res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            res.code = 204; 
+            return res;
+        }
+
+        // --- STEP 2: HANDLE ACTUAL CHAT REQUEST ---
         auto x = crow::json::load(req.body);
+        if (!x) return crow::response(400, "Invalid JSON");
+        
         string user_msg = x["message"].s();
         cout << "\n[USER]: " << user_msg << endl;
 
@@ -112,7 +128,9 @@ int main() {
         
         crow::response res;
         res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
         res.set_header("Content-Type", "application/json");
+        
         crow::json::wvalue output;
         output["reply"] = ai_res;
         res.body = output.dump();

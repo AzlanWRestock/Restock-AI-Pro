@@ -1,7 +1,9 @@
 {
   "version": 2,
-  "public": true,
-  "name": "MyAiBot",
+  "buildCommand": "npx expo export -p web",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "framework": null,
   "rewrites": [
     {
       "source": "/(.*)",
